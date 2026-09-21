@@ -1,0 +1,63 @@
+/* Graph Filter Chips — estilos dos chips do filtro do grafo */
+
+/* Faz o container do input quebrar linha, permitindo os chips acima dele. */
+.graph-controls .setting-item.mod-search-setting .setting-item-control {
+  flex-wrap: wrap;
+}
+
+.graph-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-1, 4px);
+  width: 100%;
+  margin-bottom: var(--size-2-2, 6px);
+}
+
+/* Sem chips, o container some (não ocupa espaço). */
+.graph-filter-chips:empty {
+  display: none;
+}
+
+.graph-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 1px 2px 1px 8px;
+  border-radius: var(--radius-s, 6px);
+  background-color: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller, 12px);
+  line-height: 1.7;
+  box-sizing: border-box;
+}
+
+.graph-filter-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.graph-filter-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.graph-filter-chip-remove:hover {
+  color: var(--text-on-accent);
+  background-color: var(--interactive-accent);
+}
+
+.graph-filter-chip-remove svg {
+  width: 12px;
+  height: 12px;
+}

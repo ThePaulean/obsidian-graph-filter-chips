@@ -1,0 +1,27 @@
+{
+  "name": "obsidian-graph-filter-chips",
+  "version": "1.0.0",
+  "description": "Turn graph filter queries into removable chips.",
+  "main": "main.js",
+  "scripts": {
+    "lint": "eslint main.js",
+    "sync": "bash scripts/sync-to-vault.sh"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "graph",
+    "filter",
+    "chips"
+  ],
+  "author": "Paulo Vianna",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "eslint-plugin-obsidianmd": "^0.4.2",
+    "obsidian": "^1.13.1",
+    "typescript-eslint": "^8.70.1"
+  }
+}

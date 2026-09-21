@@ -1,0 +1,44 @@
+name: Release Obsidian plugin
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches manifest version
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="$(node -p "require('./manifest.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag ($tag) does not match manifest.json version ($version)"
+            exit 1
+          fi
+
+      - name: Check for optional styles
+        id: styles
+        run: |
+          if [ -f styles.css ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          assets="main.js manifest.json"
+          if [ "${{ steps.styles.outputs.exists }}" = "true" ]; then
+            assets="$assets styles.css"
+          fi
+          gh release create "$tag" --title="$tag" --generate-notes $assets
