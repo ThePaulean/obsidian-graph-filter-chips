@@ -3,14 +3,19 @@
 /* Faz o container do input quebrar linha, permitindo os chips acima dele. */
 .graph-controls .setting-item.mod-search-setting .setting-item-control {
   flex-wrap: wrap;
+  /* A distância chips <-> busca é controlada pelo margin do .graph-filter-chips,
+     então zeramos o row-gap implícito do container. */
+  row-gap: 0;
 }
 
 .graph-filter-chips {
+  --gfc-chip-gap: 6px; /* distância entre chips */
+  --gfc-chip-to-search: 9px; /* chips <-> barra de busca */
   display: flex;
   flex-wrap: wrap;
-  gap: var(--size-2-1, 4px);
+  gap: var(--gfc-chip-gap);
   width: 100%;
-  margin-bottom: var(--size-2-2, 6px);
+  margin-bottom: var(--gfc-chip-to-search);
 }
 
 /* Sem chips, o container some (não ocupa espaço). */
