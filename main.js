@@ -8,7 +8,10 @@
  * Comportamento:
  *  - ESC: apenas sai da edição do texto (blur). Não apaga o filtro.
  *  - ENTER: converte o texto digitado em um chip, que pode ser removido no "x".
- *  - Clicar no texto de um chip devolve o termo para a caixa de edição.
+ *  - Clicar no texto de um chip o transforma num campo editável no lugar:
+ *    ENTER ou clicar fora salva, ESC cancela, vazio remove o chip.
+ *  - CTRL/CMD+Z (grafo ativo, fora de campo com texto) desfaz a última
+ *    mudança nos chips (adicionar, editar, remover).
  *
  * Como funciona por dentro (internals do Obsidian, versão estável):
  *  - O filtro é um input[type="search"] dentro de
@@ -25,7 +28,10 @@
  *    dos listeners nativos do Obsidian.
  */
 
-const { Plugin: ObsidianPlugin, setIcon } = require("obsidian");
+const { Plugin: ObsidianPlugin, Keymap, View, setIcon } = require("obsidian");
+
+// ponytail: histórico só em memória, por grafo; some ao recarregar o app.
+const HISTORY_LIMIT = 100;
 
 /** Divide uma query em termos, respeitando aspas. Ex.: path:"a b" -> ['path:"a b"'] */
 const tokenizeQuery = function tokenizeQuery(query) {
@@ -62,6 +68,9 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
     this.registerEvent(this.app.workspace.on("layout-change", this._scan));
     this.registerEvent(this.app.workspace.on("active-leaf-change", this._scan));
     this.registerInterval(window.setInterval(this._scan, 1500));
+
+    // ponytail: só a janela principal; grafo em janela popout fica sem Ctrl+Z.
+    this.registerDomEvent(document, "keydown", (evt) => this._onUndoKey(evt));
   }
 
   onunload() {
@@ -103,12 +112,16 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
     if (!settingEl || !controlEl) return;
 
     const state = {
+      view,
       engine,
       search,
       input,
       settingEl,
       controlEl,
       chips: [],
+      history: [],
+      editing: null,
+      editEl: null,
       container: null,
       onKeyDown: null,
       originalGetValue: null,
@@ -146,6 +159,8 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
     search.setValue = (value) => {
       // Chamado pelo Obsidian ao carregar opções / restaurar o filtro.
       if (typeof value === "string") {
+        state.editing = null;
+        state.editEl = null;
         state.chips = tokenizeQuery(value);
         state.input.value = "";
         this._render(state);
@@ -192,7 +207,11 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
       /* noop */
     }
     try {
+      // Devolve a query para o input nativo; sem isso o grafo fica sem filtro
+      // ao desativar/atualizar o plugin (e o Obsidian salvaria vazio).
+      const query = state.search.getValue();
       state.search.getValue = state.originalGetValue;
+      state.input.value = query;
       state.search.setValue = state.originalSetValue;
       if (state.search.__gfcOriginals) delete state.search.__gfcOriginals;
     } catch {
@@ -216,10 +235,17 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
     }
   }
 
+  /** Guarda o estado atual dos chips para o Ctrl+Z. Chamar antes de mudar. */
+  _record(state) {
+    state.history.push(state.chips.slice());
+    if (state.history.length > HISTORY_LIMIT) state.history.shift();
+  }
+
   /** ENTER: transforma o rascunho em chip e aplica o filtro. */
   _commit(state) {
     const text = state.input.value.trim();
     if (!text) return;
+    this._record(state);
     state.chips.push(text);
     state.input.value = "";
     this._render(state);
@@ -228,24 +254,71 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
 
   /** Remove o chip de índice `index` e reaplica o filtro. */
   _removeChip(state, index) {
+    // O "x" não tira o foco, então pode haver outro chip em edição: fecha antes.
+    const editing = state.editing;
+    if (editing === index) {
+      this._endEdit(state, false);
+    } else if (editing !== null) {
+      const before = state.chips.length;
+      this._endEdit(state, true);
+      if (state.chips.length < before && editing < index) index--;
+    }
+
+    this._record(state);
     state.chips.splice(index, 1);
     this._render(state);
     this._apply(state);
   }
 
-  /** Devolve o termo do chip para a caixa de edição (para editar). */
+  /** Transforma o chip de índice `index` num campo editável no lugar. */
   _editChip(state, index) {
-    const text = state.chips[index];
-    state.chips.splice(index, 1);
-    state.input.value = text;
+    state.editing = index;
     this._render(state);
-    state.input.focus();
-    const len = text.length;
-    try {
-      state.input.setSelectionRange(len, len);
-    } catch {
-      /* noop */
+    const el = state.editEl;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+
+  /** Fecha a edição: `save` grava o texto (vazio remove o chip), senão descarta. */
+  _endEdit(state, save) {
+    const index = state.editing;
+    if (index === null) return; // blur disparado pela própria remoção do campo
+    const text = state.editEl ? state.editEl.value.trim() : state.chips[index];
+    state.editing = null;
+    state.editEl = null;
+
+    if (save && text !== state.chips[index]) {
+      this._record(state);
+      if (text) state.chips[index] = text;
+      else state.chips.splice(index, 1);
+      this._render(state);
+      this._apply(state);
+    } else {
+      this._render(state);
     }
+  }
+
+  /** CTRL/CMD+Z: desfaz a última mudança nos chips do grafo ativo. */
+  _onUndoKey(evt) {
+    if (evt.key.toLowerCase() !== "z" || !Keymap.isModifier(evt, "Mod") || evt.shiftKey || evt.altKey) return;
+
+    const view = this.app.workspace.getActiveViewOfType(View);
+    const state = Array.from(this._states).find((s) => s.view === view);
+    if (!state || !state.history.length) return;
+
+    // Em campo com texto, o Ctrl+Z desfaz a digitação (nativo). Exceção: a
+    // busca do filtro vazia, onde não há digitação a desfazer.
+    const target = evt.target;
+    const isTextField =
+      target.isContentEditable || (target.matches && target.matches("input, textarea"));
+    if (isTextField && !(target === state.input && !state.input.value)) return;
+
+    evt.preventDefault();
+    state.chips = state.history.pop();
+    state.editing = null;
+    state.editEl = null;
+    this._render(state);
     this._apply(state);
   }
 
@@ -255,6 +328,28 @@ module.exports = class GraphFilterChips extends ObsidianPlugin {
     container.empty();
 
     state.chips.forEach((text, index) => {
+      if (index === state.editing) {
+        const el = container.createEl("input", {
+          cls: "graph-filter-chip-input",
+          attr: { type: "text", "aria-label": "Editar filtro", spellcheck: "false" },
+        });
+        el.value = text;
+        el.addEventListener("keydown", (evt) => {
+          if (evt.key === "Enter" && !evt.isComposing && evt.keyCode !== 229) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            this._endEdit(state, true);
+          } else if (evt.key === "Escape") {
+            evt.preventDefault();
+            evt.stopPropagation();
+            this._endEdit(state, false);
+          }
+        });
+        el.addEventListener("blur", () => this._endEdit(state, true));
+        state.editEl = el;
+        return;
+      }
+
       const chip = container.createSpan({ cls: "graph-filter-chip" });
 
       const label = chip.createSpan({ cls: "graph-filter-chip-text", text });

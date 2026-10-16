@@ -1,9 +1,9 @@
 {
   "id": "graph-filter-chips",
   "name": "Graph Filter Chips",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minAppVersion": "1.12.7",
-  "description": "Turn graph filter queries into removable chips: Esc leaves editing without clearing, and Enter saves the filter as a chip you can remove with x.",
+  "description": "Turn graph filter queries into removable chips: Esc leaves editing without clearing, Enter saves the filter as a chip you can edit in place or remove with x, and Ctrl/Cmd+Z undoes chip changes.",
   "author": "Paulo Vianna",
   "authorUrl": "https://github.com/ThePaulean",
   "isDesktopOnly": false
